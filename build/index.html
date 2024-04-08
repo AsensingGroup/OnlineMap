@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <!-- 在此处写注释 <meta http-equiv="Content-Type" content="text/html; charset=GB2312" />-->
+    <meta charset="GB2312">
+    <meta http-equiv="Content-Type" content="text/html">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+<style type="text/css">
+body, html,#allmap {width: 100%;height: 100%;overflow: hidden;margin:0;}
+#l-map{height:100%;width:78%;float:left;border-right:2px solid #bcbcbc;}
+#r-result{height:100%;width:20%;float:left;}
+</style>
+<title>高德地图</title>
+    <link rel="stylesheet" href="https://cache.amap.com/lbs/static/main1119.css" />
+    <script src="https://webapi.amap.com/maps?v=2.0&key=7f2c690dc8aecb3c4a8b7616798297d0&plugin=AMap.MouseTool,AMap.PlaceSearch,AMap.AdvancedInfoWindow,AMap.RangingTool,AMap.MarkerClusterer"></script>
+
+<style>
+html,body,#allmap{
+height:100%;
+}
+.info{
+width:26rem;
+}
+  .card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  word-wrap: break-word;
+  background-color: rgba(38, 49, 59, 0);
+  width: 15rem;
+  position: fixed;
+  bottom: 0.5rem;
+  left: 5rem;
+  -ms-flex: 1 1 auto;
+  flex: 1 1 auto;
+  padding: 0.1rem 0.5rem;
+  color: white;
+}
+.cell{
+	  padding-right:2px;
+	  height: 35px;
+	  vertical-align: middle;
+	  display: inline-block;
+	  line-height: 35px;
+	  width:35%;
+	  font-size: 14px;
+	  font-weight: 300;
+}
+.cell_dark{
+	  padding-right:2px;
+	  height: 35px;
+	  vertical-align: middle;
+	  display: inline-block;
+	  line-height: 35px;
+	  width:35%;
+	  font-size: 14px;
+	  font-weight: 300;
+	  color:rgb(255, 255, 255)
+		}
+.letter{
+	  padding-right: 10px;
+	  height: 35px;
+	  vertical-align: middle;
+	  display: inline-block;
+	  line-height: 35px;
+	  width: 5%;
+	  color:  rgba(79, 147, 191, 1);
+	  font-size: 14px;
+	  font-weight: 700;
+}
+</style>
+</head>
+<body>
+<div id="allmap"></div>
+<div class='card'>
+<span> <b class='cell' id='lat'>23°27′30"</b> <b class='letter'>N</b>
+<b class='cell' id='lng'>144°21′32.65"</b> <b class='letter'>E</b> </span>
+</div>
+</body>
+</html>
+
+<script type="text/javascript">
+	//new window.VConsole();
+
+    var map = new AMap.Map('allmap', {
+        zoom: 11, //级别
+		resizeEnable: true,
+        center: [114.0662145267, 22.5493644122], //中心点坐标
+        viewMode: '3D',//使用3D视图
+		mapStyle: 'amap://styles/normal' //默认夜间模式
+    });
+	
+	AMap.plugin(["AMap.ControlBar"],function() {
+		var controlBar = new AMap.ControlBar({
+			   position:{
+               left:'10px',
+               bottom:'85px',
+		}
+		});
+		map.addControl(controlBar)
+	});
+	
+    AMap.plugin('AMap.ToolBar', function () {
+       var toolbar = new AMap.ToolBar({
+		     position:{
+               left:'40px',
+               bottom:'20px',
+		}
+        });
+        map.addControl(toolbar);
+    });
+
+	
+    AMap.plugin(["AMap.MapType"], function () {
+        //地图类型切换
+        var type = new AMap.MapType({
+            defaultType: 0 //使用2D地图
+        });
+        map.addControl(type);
+    });
+
+    AMap.plugin('AMap.Geocoder', function () {
+        var geocoder = new AMap.Geocoder({
+            // city 指定进行编码查询的城市，支持传入城市名、adcode 和 citycode
+            city: '全国'
+        })
+
+        // 使用geocoder做地理/逆地理编码
+    })
+	
+
+	var lineNumMax = 5000;//Polyline类最大点数量
+
+    //默认样式
+    ruler1 = new AMap.RangingTool(map);
+    var placeSearch = new AMap.PlaceSearch();  //构造地点查询类
+
+
+    var marker_GPS = new AMap.Marker({
+        position: [113.49930424902723, 23.157393941217865],              // 将标注添加到地图中
+		zIndex:100,
+        icon: "images/red_point.svg",
+		autoRotation: true,
+        offset: new AMap.Pixel(-10, -10),
+		autoRotation: true,
+		angle:-90,
+    });
+    var marker_INS = new AMap.Marker({
+		map: map,
+        position: [113.49930424902723, 23.157393941217865],              // 将标注添加到地图中
+		zIndex:110,
+        icon: "images/car.png",
+		//icon: "images/blue_point.svg",		
+        offset: new AMap.Pixel(-28, -16),
+		autoRotation: true,
+		angle: -90,
+		
+    });
+    marker_GPS.setMap(map);
+    marker_INS.setMap(map);
+
+    var path_GPS = []; //当前Polyline的path
+    var path_INS = [];
+    var path_Other = [];
+    var ShowGPS = true;
+ 
+	var polylines_GPS = [];
+	var polylines_INS = [];
+	var polylines_Other = [];
+	
+	function createPolyline(type, path) {
+		if (type == 1){ //gps
+			var polyline_GPS = new AMap.Polyline({
+				path: path,            // 设置线覆盖物路径
+				zIndex:40,
+				showDir: true,
+				strokeColor: '#ff0000',   // 线颜色
+				strokeWeight: 10,         // 线宽
+				strokeOpacity: 0.5,		  // 线条透明度
+			});
+			polylines_GPS.push(polyline_GPS);
+			map.add(polyline_GPS);
+		}		
+		else if(type==2) {	//ins
+			 var polyline_INS = new AMap.Polyline({
+				path: path,            // 设置线覆盖物路径
+				zIndex:50,
+				showDir: true,
+				strokeColor: '#0000ff',   // 线颜色
+				strokeWeight: 10,         // 线宽
+				strokeOpacity: 0.5,
+			});
+			polylines_INS.push(polyline_INS);
+			map.add(polyline_INS);
+		}
+		else {	//ins
+			 var polyline_Other = new AMap.Polyline({
+				path: path,            // 设置线覆盖物路径
+				zIndex:50,
+				showDir: true,
+				strokeColor: '#00ff00',   // 线颜色
+				strokeWeight: 10,         // 线宽
+				strokeOpacity: 0.5,
+			});
+			polylines_Other.push(polyline_Other);
+			map.add(polyline_Other);
+		}
+
+	}
+
+    var cluster, markers = [];
+    cluster = new AMap.MarkerClusterer(map, markers, {
+        gridSize: 80
+    });
+ 
+    function render5711(JD, WD, Time, GaoDu, HengGuanJiao, FuYangJiao, FangXiangJiao, SuDu, followIns) {
+        var lnglat = [JD,WD];		
+			
+		marker_INS.setPosition(lnglat);
+		marker_INS.setAngle(FangXiangJiao-90);
+		
+		var width_extern = 0.1*(map.getBounds().northEast.getLng() - map.getBounds().southWest.getLng());
+		var height_extern = 0.1*(map.getBounds().northEast.getLat()-map.getBounds().southWest.getLat());
+		//判断数据是否超出范围
+		if (followIns||JD<map.getBounds().southWest.getLng()+width_extern
+		||JD>map.getBounds().northEast.getLng()-width_extern
+		||WD<map.getBounds().southWest.getLat()+height_extern
+		||WD>map.getBounds().northEast.getLat()-height_extern){		
+			map.setCenter(lnglat); //设置地图中心点
+		}
+
+		if (path_INS.length == lineNumMax) {
+			//alert("ins point num = " + test_point_num_ins);
+			var last_point = path_INS.pop();
+			path_INS.length = 0;//清空数组
+			path_INS.push(last_point);
+			path_INS.push(lnglat);
+			createPolyline(2, path_INS);
+		}
+		else {
+			path_INS.push(lnglat);
+			if (path_INS.length > 2){
+				polylines_INS[polylines_INS.length-1].setPath(path_INS);
+			}
+			else if (path_INS.length == 2){
+				createPolyline(2, path_INS);
+			}
+		}
+		
+		//path_INS.push(lnglat);
+		//polyline_INS.setPath(path_INS);
+		//setLngLat(JD, WD);
+    }
+
+    function renderBase(JD, WD, Time, GaoDu, HengGuanJiao, FuYangJiao, FangXiangJiao, SuDu, followGPS) {
+        var lnglat = [JD,WD];
+		marker_GPS.setPosition(lnglat);
+		
+		var width_extern = 0.1*(map.getBounds().northEast.getLng() - map.getBounds().southWest.getLng());
+		var height_extern = 0.1*(map.getBounds().northEast.getLat()-map.getBounds().southWest.getLat());
+		
+		if (followGPS||JD<map.getBounds().southWest.getLng()+width_extern
+		||JD>map.getBounds().northEast.getLng()-width_extern
+		||WD<map.getBounds().southWest.getLat()+height_extern
+		||WD>map.getBounds().northEast.getLat()-height_extern){
+			map.setCenter(lnglat); //设置地图中心点
+		}
+		
+		if (path_GPS.length == lineNumMax) {
+			//alert("gps point num = " + test_point_num);
+			var last_point = path_GPS.pop();
+			path_GPS.length = 0;
+			path_GPS.push(last_point);
+			path_GPS.push(lnglat);
+			createPolyline(1, path_GPS);
+		}
+		else {
+			path_GPS.push(lnglat);
+			if (path_GPS.length > 2){
+				polylines_GPS[polylines_GPS.length-1].setPath(path_GPS);
+			}
+			else if (path_GPS.length == 2){
+				createPolyline(1, path_GPS);
+			}
+		}
+		
+        //setLngLat(JD, WD);
+    }
+
+	function renderOther(JD, WD, Time, GaoDu, HengGuanJiao, FuYangJiao, FangXiangJiao, SuDu, followGPS) {
+        var lnglat = [JD,WD];
+		
+		var width_extern = 0.1*(map.getBounds().northEast.getLng() - map.getBounds().southWest.getLng());
+		var height_extern = 0.1*(map.getBounds().northEast.getLat()-map.getBounds().southWest.getLat());
+		
+		if (followGPS||JD<map.getBounds().southWest.getLng()+width_extern
+		||JD>map.getBounds().northEast.getLng()-width_extern
+		||WD<map.getBounds().southWest.getLat()+height_extern
+		||WD>map.getBounds().northEast.getLat()-height_extern){
+			map.setCenter(lnglat); //设置地图中心点
+		}
+		
+		if (path_Other.length == lineNumMax) {
+			//alert("gps point num = " + test_point_num);
+			var last_point = path_Other.pop();
+			path_Other.length = 0;
+			path_Other.push(last_point);
+			path_Other.push(lnglat);
+			createPolyline(3, path_Other);
+		}
+		else {
+			path_Other.push(lnglat);
+			if (path_Other.length > 2){
+				polylines_Other[polylines_Other.length-1].setPath(path_Other);
+			}
+			else if (path_Other.length == 2){
+				createPolyline(3, path_Other);
+			}
+		}
+    }
+
+	//回到当前位置
+    function locate(JD, WD) {
+		var lnglat = [JD,WD];
+        map.setZoom(18);
+		map.setCenter(lnglat);	
+    }
+	
+    function DrawRedLine(JD1, WD1, JD2, WD2) {
+        map.remove(polyline_GPS);
+        path_GPS.push([JD2, WD2]);
+        polyline_GPS.setPath(path_GPS);
+        map.add(polyline_GPS);
+    }
+	
+	//清除GPS
+    function clearBase() {
+        map.remove(polylines_GPS);
+		polylines_GPS.length = 0;
+		path_GPS.length = 0;
+        //path_GPS = path_GPS.slice(-1);
+    }
+	
+	//清除INS
+    function clear5711() {
+        map.remove(polylines_INS);
+		polylines_INS.length = 0;
+		path_INS.length =0;	
+		//splice()
+        
+    }
+
+	//清除Other
+    function clearOther() {
+        map.remove(polylines_Other);
+		polylines_Other.length = 0;
+		path_Other.length =0;	
+		//splice()
+        
+    }
+	
+    function ClearRedCurve() {
+        var path1 = [
+					[JD1, WD1],
+					[JD2, WD2]
+					];
+        var polyline2 = new AMap.Polyline({
+            path: path1,            // 设置线覆盖物路径
+            showDir: true,
+            strokeColor: '#0000ff',   // 线颜色
+            strokeWeight: 5           // 线宽
+        });
+
+        map.add(polyline2);
+
+    }
+	
+    function MeasureCtrl(Measure) {
+        if (Measure == "1") {
+            ruler1.turnOn();
+        }
+        else {
+            ruler1.turnOff();
+        }
+    }
+   
+   function showBase(Show) {
+        if (Show) {
+			for (var i=0; i<polylines_GPS.length; ++i) {
+				polylines_GPS[i].show();
+			}
+        }
+        else {
+			for (var i=0; i<polylines_GPS.length; ++i) {
+				polylines_GPS[i].hide();
+				}
+        }
+    }
+	
+	
+   function show5711(Show) {
+        if (Show) {
+			for (var i=0; i<polylines_INS.length; ++i) {
+				polylines_INS[i].show();
+			}
+        }
+        else {
+			for (var i=0; i<polylines_INS.length; ++i) {
+				polylines_INS[i].hide();
+				}
+        }
+    }
+
+   function showOther(Show) {
+        if (Show) {
+			for (var i=0; i<polylines_Other.length; ++i) {
+				polylines_Other[i].show();
+			}
+        }
+        else {
+			for (var i=0; i<polylines_Other.length; ++i) {
+				polylines_Other[i].hide();
+				}
+        }
+    }
+    
+	//地图模式设置
+	function setMapMode(color) {
+		//normal,macaron,graffiti,whitesmoke,dark,fresh,darkblue,blue,light,
+		var style = 'amap://styles/' + color;
+		map.setMapStyle(style);
+		
+	  if (color == 'grey') //夜间
+	  {
+		var obj = document.getElementById('lng');
+		obj.setAttribute("class", "cell_dark");
+		
+		var obj2 = document.getElementById('lat');
+		obj2.setAttribute("class", "cell_dark");
+		
+	  }else {
+		var obj = document.getElementById('lng');
+		obj.setAttribute("class", "cell");
+		
+		var obj2 = document.getElementById('lat');
+		obj2.setAttribute("class", "cell");
+		}
+	}
+	
+	//设置线条属性 
+	function setLineStyle(type, weight, color) {
+		if (1 == type) {//gnss(gps)
+			for (var i=0; i<polylines_GPS.length; ++i) {
+				polylines_GPS[i].setOptions({
+					strokeWeight:weight,
+					strokeColor:color
+				});
+			}
+		}
+		else  {	//imu(ins)
+			for (var i=0; i<polylines_GPS.length; ++i) {
+				polylines_INS[i].setOptions({
+					strokeWeight:weight,
+					strokeColor:color
+				});
+			}
+		}
+	}
+	
+	//获取页面边界
+	function getBounds() {
+		var bounds = map.getBounds();
+		return bounds.toString();
+	}
+	
+	//设置经纬度
+	function setLngLat(lng, lat) {
+		var lat_deg, lat_min, lat_sec;
+		var lng_deg, lng_min, lng_sec;
+		
+		lat_deg = Math.floor(lat);
+		lat_min =  Math.floor((lat-lat_deg)*60);
+		lat_sec = ((((lat-lat_deg)*60) - lat_min) *60).toFixed(2);
+		
+		lng_deg = Math.floor(lng);
+		lng_min =  Math.floor((lng-lng_deg)*60);
+		lng_sec = ((((lng-lng_deg)*60) - lng_min) *60).toFixed(2);
+		
+   		//console.log(lat_deg+'°' +lat_min+'′'+lat_sec+'″');
+		document.getElementById("lat").innerHTML = lat_deg+'°' +lat_min+'′'+lat_sec+'″';
+		document.getElementById("lng").innerHTML = lng_deg+'°' +lng_min+'′'+lng_sec+'″'; 
+	}
+	
+</script>
